@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/binary"
 	"io/ioutil"
-	"syscall"
+	"os"
 	"reflect"
+	"syscall"
 	"unsafe"
 )
 
@@ -39,7 +40,7 @@ func (m *Jit) Compile(code string) []uint8 {
 	mem := make([]uint8, 90000)
 	stack := make([]int, 0)
 	m.Emit([]uint8{0x49, 0xBD})
-  hdr := (*reflect.SliceHeader)(unsafe.Pointer(&mem))
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&mem))
 	m.Emit64(uint64(hdr.Data))
 	for _, ch := range code {
 		switch ch {
@@ -76,19 +77,19 @@ func (m *Jit) Compile(code string) []uint8 {
 			offset := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 			m.Emit([]uint8{0x41, 0x80, 0x7d, 0x00, 0x00})
-			
+
 			jmpb_from := len(m.inst) + 6
 			jmpb_to := offset + 6
 			rel_offset := relative_offset(jmpb_from, jmpb_to)
-			
+
 			m.Emit([]uint8{0x0F, 0x85})
 			m.Emit32(uint32(rel_offset))
-			
+
 			jmpf_from := offset + 6
 			jmpf_to := len(m.inst)
 			rel_offset_forward := relative_offset(jmpf_from, jmpf_to)
-			
-			m.Replace32(offset + 2, uint32(rel_offset_forward))
+
+			m.Replace32(offset+2, uint32(rel_offset_forward))
 		}
 	}
 
@@ -106,11 +107,10 @@ func relative_offset(from, to int) int {
 	}
 }
 
-func main() {
+func Bf(source string) {
 	jit := Jit{inst: []uint8{}}
-	dat, _ := ioutil.ReadFile("test.bf")
-	code := jit.Compile(string(dat))
-	
+	code := jit.Compile(source)
+
 	data, _ := syscall.Mmap(-1, 0, len(code), syscall.PROT_READ|syscall.PROT_WRITE|syscall.PROT_EXEC, syscall.MAP_PRIVATE|syscall.MAP_ANONYMOUS)
 	for i, b := range code {
 		data[i] = b
@@ -119,4 +119,10 @@ func main() {
 	unsafeFunc := (uintptr)(unsafe.Pointer(&data))
 	f := *(*execFunc)(unsafe.Pointer(&unsafeFunc))
 	f()
+}
+
+func main() {
+	sourceFile := os.Args[1:][0]
+	dat, _ := ioutil.ReadFile(sourceFile)
+	Bf(string(dat))
 }
